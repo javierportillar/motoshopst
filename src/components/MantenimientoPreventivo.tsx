@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
 import { Calendar, Bell, Phone, Clock, AlertTriangle, CheckCircle, Filter } from 'lucide-react';
 
+type WeekFilterOption = 'esta' | 'proxima' | 'todas';
+
 const MantenimientoPreventivo: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'novedades' | 'programados'>('novedades');
-  const [filterWeek, setFilterWeek] = useState<'esta' | 'proxima' | 'todas'>('esta');
+  const [filterWeek, setFilterWeek] = useState<WeekFilterOption>('esta');
+
+  const handleFilterWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    if (value === 'esta' || value === 'proxima' || value === 'todas') {
+      setFilterWeek(value);
+    }
+  };
 
   // Mock data for maintenance notifications
   const novedades = [
@@ -215,7 +224,7 @@ const MantenimientoPreventivo: React.FC = () => {
                 <Filter className="h-5 w-5 text-gray-400" />
                 <select
                   value={filterWeek}
-                  onChange={(e) => setFilterWeek(e.target.value as any)}
+                  onChange={handleFilterWeekChange}
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="esta">Esta semana</option>

@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
-  Calendar, 
-  FileText,
-  Filter,
-  Download
-} from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, FileText, Filter, Download } from 'lucide-react';
+
+type DateRangeOption = 'today' | 'week' | 'month' | 'custom';
+
+const DATE_RANGE_OPTIONS: { key: DateRangeOption; label: string }[] = [
+  { key: 'today', label: 'Hoy' },
+  { key: 'week', label: 'Semana' },
+  { key: 'month', label: 'Mes' },
+  { key: 'custom', label: 'Personalizado' }
+];
 
 const Balance: React.FC = () => {
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [dateRange, setDateRange] = useState<DateRangeOption>('month');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showDetails, setShowDetails] = useState(false);
@@ -143,15 +144,10 @@ const Balance: React.FC = () => {
           </div>
           
           <div className="flex flex-wrap gap-2">
-            {[
-              { key: 'today', label: 'Hoy' },
-              { key: 'week', label: 'Semana' },
-              { key: 'month', label: 'Mes' },
-              { key: 'custom', label: 'Personalizado' }
-            ].map(({ key, label }) => (
+            {DATE_RANGE_OPTIONS.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setDateRange(key as any)}
+                onClick={() => setDateRange(key)}
                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors duration-200 ${
                   dateRange === key
                     ? 'bg-blue-600 text-white'
@@ -249,7 +245,7 @@ const Balance: React.FC = () => {
       <div className="bg-white rounded-lg p-6 shadow-sm border">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Ingresos Mensuales</h3>
         <div className="h-64 flex items-end justify-around bg-gray-50 rounded-lg p-4">
-          {comparacionMensual.map((item, index) => (
+          {comparacionMensual.map((item) => (
             <div key={item.mes} className="flex flex-col items-center">
               <div 
                 className="bg-blue-600 rounded-t-md w-12 transition-all duration-300 hover:bg-blue-700"

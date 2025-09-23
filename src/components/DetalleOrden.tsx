@@ -1,7 +1,7 @@
 import React from 'react';
-import { X, Calendar, Clock, User, Recycle as Motorcycle, Wrench, DollarSign, FileText } from 'lucide-react';
+import { X, Calendar, User, Recycle as Motorcycle, Wrench, FileText } from 'lucide-react';
 import { OrdenTrabajo } from '../types';
-import { SERVICIOS, CATEGORIAS } from '../data/servicios';
+import { useServicios } from '../context/ServiciosContext';
 
 interface DetalleOrdenProps {
   orden: OrdenTrabajo;
@@ -9,6 +9,8 @@ interface DetalleOrdenProps {
 }
 
 const DetalleOrden: React.FC<DetalleOrdenProps> = ({ orden, onClose }) => {
+  const { servicios, categorias } = useServicios();
+
   const getStatusColor = (estado: string) => {
     switch (estado) {
       case 'pendiente':
@@ -182,8 +184,8 @@ const DetalleOrden: React.FC<DetalleOrdenProps> = ({ orden, onClose }) => {
             </div>
             <div className="space-y-4">
               {serviciosOrden.map((servicioOrden) => {
-                const servicio = SERVICIOS.find(s => s.id === servicioOrden.servicio_id);
-                const categoria = CATEGORIAS.find(c => c.id === servicio?.categoria_id);
+                const servicio = servicios.find(s => s.id === servicioOrden.servicio_id);
+                const categoria = categorias.find(c => c.id === servicio?.categoria_id);
                 
                 return (
                   <div key={servicioOrden.servicio_id} className="border rounded-lg p-3">

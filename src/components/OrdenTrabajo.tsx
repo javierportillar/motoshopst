@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Edit, Eye, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit, Eye, Trash2 } from 'lucide-react';
 import FormularioOrden from './FormularioOrden';
 import DetalleOrden from './DetalleOrden';
 import { OrdenTrabajo as OrdenTrabajoType } from '../types';

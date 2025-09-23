@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, User, Recycle as Motorcycle } from 'lucide-react';
-import { CATEGORIAS, SERVICIOS } from '../data/servicios';
+import { X, Trash2, User, Recycle as Motorcycle } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useServicios } from '../context/ServiciosContext';
 
 interface FormularioOrdenProps {
   onClose: () => void;
 }
 
 const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose }) => {
+  const { categorias, servicios } = useServicios();
   const [currentStep, setCurrentStep] = useState(1);
   
   // Estado del cliente
@@ -40,7 +42,7 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose }) => {
   const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState('');
 
   const agregarServicio = (servicioId: string) => {
-    const servicio = SERVICIOS.find(s => s.id === servicioId);
+    const servicio = servicios.find(s => s.id === servicioId);
     if (servicio && !serviciosSeleccionados.find(s => s.servicio_id === servicioId)) {
       setServiciosSeleccionados([
         ...serviciosSeleccionados,
@@ -269,9 +271,9 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose }) => {
 
       {/* Categorías de Servicios */}
       <div className="space-y-4">
-        {CATEGORIAS.map((categoria) => {
-          const IconComponent = Icons[categoria.icono as keyof typeof Icons] as React.ComponentType<any>;
-          const serviciosCategoria = SERVICIOS.filter(s => s.categoria_id === categoria.id);
+        {categorias.map((categoria) => {
+          const IconComponent = Icons[categoria.icono as keyof typeof Icons] as LucideIcon | undefined;
+          const serviciosCategoria = servicios.filter(s => s.categoria_id === categoria.id);
           
           return (
             <div key={categoria.id} className="border border-gray-200 rounded-lg">
@@ -329,7 +331,7 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose }) => {
           <h4 className="font-medium text-gray-900 mb-4">Servicios Seleccionados</h4>
           <div className="space-y-3">
             {serviciosSeleccionados.map((servicio) => {
-              const servicioInfo = SERVICIOS.find(s => s.id === servicio.servicio_id);
+              const servicioInfo = servicios.find(s => s.id === servicio.servicio_id);
               return (
                 <div key={servicio.servicio_id} className="bg-white rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">

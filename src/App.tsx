@@ -4,6 +4,8 @@ import Dashboard from './components/Dashboard';
 import OrdenTrabajo from './components/OrdenTrabajo';
 import MantenimientoPreventivo from './components/MantenimientoPreventivo';
 import Balance from './components/Balance';
+import Configuracion from './components/Configuracion';
+import { ServiciosProvider } from './context/ServiciosContext';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -26,21 +28,18 @@ function App() {
           </div>
         );
       case 'configuracion':
-        return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-gray-900">Configuración</h2>
-            <p className="text-gray-600 mt-2">Módulo en desarrollo</p>
-          </div>
-        );
+        return <Configuracion />;
       default:
         return <Dashboard onPageChange={setCurrentPage} />;
     }
   };
 
   return (
-    <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
-      {renderCurrentPage()}
-    </Layout>
+    <ServiciosProvider>
+      <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
+        {renderCurrentPage()}
+      </Layout>
+    </ServiciosProvider>
   );
 }
 
