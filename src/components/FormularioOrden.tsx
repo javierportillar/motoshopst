@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { X, Trash2, User, Recycle as Motorcycle } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { Cliente as ClienteType, Moto as MotoType, OrdenTrabajo as OrdenTrabajoType } from '../types';
 import { useServicios } from '../context/ServiciosContext';
 
 interface FormularioOrdenProps {
   onClose: () => void;
+  onSubmit: (orden: OrdenTrabajoType) => void;
 }
 
-const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose }) => {
+const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit }) => {
   const { categorias, servicios } = useServicios();
   const [currentStep, setCurrentStep] = useState(1);
   
@@ -76,17 +78,52 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose }) => {
   };
 
   const handleSubmit = () => {
-    // Aquí se guardaría en la base de datos
-    console.log('Nueva orden:', {
-      cliente,
-      moto,
-      serviciosSeleccionados,
-      observacionesGenerales,
-      fechaEntregaEstimada,
-      total: calcularTotal()
-    });
-    
-    // Simular guardado exitoso
+    const timestamp = Date.now();
+    const now = new Date();
+    const createdAt = now.toISOString();
+
+    const clienteId = `cliente-${timestamp}`;
+    const motoId = `moto-${timestamp}`;
+    const ordenId = `orden-${timestamp}`;
+
+    const nuevoCliente: ClienteType = {
+      id: clienteId,
+      nombre: cliente.nombre,
+      telefono: cliente.telefono,
+      email: cliente.email || undefined,
+      cedula: cliente.cedula,
+      direccion: cliente.direccion || undefined,
+      created_at: createdAt
+    };
+
+    const nuevaMoto: MotoType = {
+      id: motoId,
+      cliente_id: clienteId,
+      cliente: nuevoCliente,
+      marca: moto.marca,
+      modelo: moto.modelo,
+      año: moto.año,
+      placa: moto.placa,
+      kilometraje: moto.kilometraje,
+      color: moto.color,
+      created_at: createdAt
+    };
+
+    const fechaEntregaISO = new Date(`${fechaEntregaEstimada}T00:00:00`).toISOString();
+
+    const nuevaOrden: OrdenTrabajoType = {
+      id: ordenId,
+      moto_id: motoId,
+      moto: nuevaMoto,
+      fecha_ingreso: createdAt,
+      fecha_entrega_estimada: fechaEntregaISO,
+      estado: 'pendiente',
+      observaciones: observacionesGenerales || undefined,
+      total: calcularTotal(),
+      created_at: createdAt
+    };
+
+    onSubmit(nuevaOrden);
     alert('Orden de trabajo creada exitosamente');
     onClose();
   };

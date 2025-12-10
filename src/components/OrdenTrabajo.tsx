@@ -9,9 +9,7 @@ const OrdenTrabajo: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<OrdenTrabajoType | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-
-  // Mock data - En producción vendría de la base de datos
-  const ordenes: OrdenTrabajoType[] = [
+  const [ordenes, setOrdenes] = useState<OrdenTrabajoType[]>([
     {
       id: '1',
       moto_id: '1',
@@ -68,7 +66,7 @@ const OrdenTrabajo: React.FC = () => {
       observaciones: 'Mantenimiento de 20.000 km',
       created_at: '2025-01-09'
     }
-  ];
+  ]);
 
   const getStatusColor = (estado: string) => {
     switch (estado) {
@@ -109,7 +107,14 @@ const OrdenTrabajo: React.FC = () => {
   });
 
   if (showForm) {
-    return <FormularioOrden onClose={() => setShowForm(false)} />;
+    return (
+      <FormularioOrden
+        onClose={() => setShowForm(false)}
+        onSubmit={(nuevaOrden) => {
+          setOrdenes((prev) => [nuevaOrden, ...prev]);
+        }}
+      />
+    );
   }
 
   if (selectedOrder) {
