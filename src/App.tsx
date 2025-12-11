@@ -5,6 +5,8 @@ import OrdenTrabajo from './components/OrdenTrabajo';
 import MantenimientoPreventivo from './components/MantenimientoPreventivo';
 import Balance from './components/Balance';
 import Configuracion from './components/Configuracion';
+import Clientes from './components/Clientes';
+import Mecanicos from './components/Mecanicos';
 import { ServiciosProvider } from './context/ServiciosContext';
 
 function App() {
@@ -21,12 +23,9 @@ function App() {
       case 'balance':
         return <Balance />;
       case 'clientes':
-        return (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-gray-900">Gestión de Clientes</h2>
-            <p className="text-gray-600 mt-2">Módulo en desarrollo</p>
-          </div>
-        );
+        return <Clientes />;
+      case 'mecanicos':
+        return <Mecanicos />;
       case 'configuracion':
         return <Configuracion />;
       default:

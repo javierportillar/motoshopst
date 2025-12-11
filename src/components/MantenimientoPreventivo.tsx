@@ -1,21 +1,27 @@
-import React, { useState } from 'react';
-import { Calendar, Bell, Phone, Clock, AlertTriangle, CheckCircle, Filter } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Calendar, Bell, Phone, Clock, AlertTriangle, CheckCircle, Filter, Check } from 'lucide-react';
 
 type WeekFilterOption = 'esta' | 'proxima' | 'todas';
+
+type Novedad = {
+  id: string;
+  cliente: string;
+  telefono: string;
+  moto: string;
+  placa: string;
+  servicio: string;
+  ultimoServicio: string;
+  fechaContacto: string;
+  prioridad: 'alta' | 'media' | 'baja';
+  contactado: boolean;
+  interes?: 'si' | 'no';
+  nota?: string;
+};
 
 const MantenimientoPreventivo: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'novedades' | 'programados'>('novedades');
   const [filterWeek, setFilterWeek] = useState<WeekFilterOption>('esta');
-
-  const handleFilterWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const { value } = event.target;
-    if (value === 'esta' || value === 'proxima' || value === 'todas') {
-      setFilterWeek(value);
-    }
-  };
-
-  // Mock data for maintenance notifications
-  const novedades = [
+  const [novedadesData, setNovedadesData] = useState<Novedad[]>([
     {
       id: '1',
       cliente: 'Carlos Pérez',
@@ -25,7 +31,7 @@ const MantenimientoPreventivo: React.FC = () => {
       servicio: 'Cambio de aceite',
       ultimoServicio: '2024-11-15',
       fechaContacto: '2025-01-13',
-      prioridad: 'alta' as const,
+      prioridad: 'alta',
       contactado: false
     },
     {
@@ -37,8 +43,10 @@ const MantenimientoPreventivo: React.FC = () => {
       servicio: 'Mantenimiento 10.000 km',
       ultimoServicio: '2024-10-20',
       fechaContacto: '2025-01-14',
-      prioridad: 'media' as const,
-      contactado: true
+      prioridad: 'media',
+      contactado: true,
+      interes: 'si',
+      nota: 'Quiere agendar la próxima semana'
     },
     {
       id: '3',
@@ -49,7 +57,7 @@ const MantenimientoPreventivo: React.FC = () => {
       servicio: 'Revisión de frenos',
       ultimoServicio: '2024-12-01',
       fechaContacto: '2025-01-15',
-      prioridad: 'alta' as const,
+      prioridad: 'alta',
       contactado: false
     },
     {
@@ -61,7 +69,7 @@ const MantenimientoPreventivo: React.FC = () => {
       servicio: 'Calibración de válvula',
       ultimoServicio: '2024-09-10',
       fechaContacto: '2025-01-16',
-      prioridad: 'alta' as const,
+      prioridad: 'alta',
       contactado: false
     },
     {
@@ -73,10 +81,21 @@ const MantenimientoPreventivo: React.FC = () => {
       servicio: 'Cambio de cadena',
       ultimoServicio: '2024-11-25',
       fechaContacto: '2025-01-18',
-      prioridad: 'media' as const,
-      contactado: true
+      prioridad: 'media',
+      contactado: true,
+      interes: 'no',
+      nota: 'Prefiere esperar hasta el próximo mes'
     }
-  ];
+  ]);
+  const [activeContactId, setActiveContactId] = useState<string | null>(null);
+  const [contactNotes, setContactNotes] = useState<Record<string, { nota: string; interes: 'si' | 'no' | '' }>>({});
+
+  const handleFilterWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    if (value === 'esta' || value === 'proxima' || value === 'todas') {
+      setFilterWeek(value);
+    }
+  };
 
   // Mock data for scheduled maintenance
   const mantenimientosProgramados = [
@@ -140,35 +159,61 @@ const MantenimientoPreventivo: React.FC = () => {
   };
 
   const marcarComoContactado = (id: string) => {
-    // Aquí se actualizaría el estado en la base de datos
-    console.log(`Marcando como contactado: ${id}`);
+    setActiveContactId(id);
+    setContactNotes((prev) => ({
+      ...prev,
+      [id]: prev[id] ?? { nota: '', interes: '' }
+    }));
   };
 
-  const filteredNovedades = novedades.filter(novedad => {
-    if (filterWeek === 'todas') return true;
-    
-    const fechaContacto = new Date(novedad.fechaContacto);
-    const hoy = new Date();
-    const inicioSemana = new Date(hoy);
-    inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-    const finSemana = new Date(inicioSemana);
-    finSemana.setDate(inicioSemana.getDate() + 6);
-    
-    const inicioProximaSemana = new Date(finSemana);
-    inicioProximaSemana.setDate(finSemana.getDate() + 1);
-    const finProximaSemana = new Date(inicioProximaSemana);
-    finProximaSemana.setDate(inicioProximaSemana.getDate() + 6);
+  const guardarContacto = (id: string) => {
+    const notas = contactNotes[id];
+    if (!notas?.interes) return;
 
-    if (filterWeek === 'esta') {
-      return fechaContacto >= inicioSemana && fechaContacto <= finSemana;
-    } else if (filterWeek === 'proxima') {
-      return fechaContacto >= inicioProximaSemana && fechaContacto <= finProximaSemana;
-    }
-    
-    return true;
-  });
+    setNovedadesData((prev) =>
+      prev.map((novedad) =>
+        novedad.id === id
+          ? {
+              ...novedad,
+              contactado: true,
+              nota: notas.nota.trim() ? notas.nota.trim() : undefined,
+              interes: notas.interes === 'si' ? 'si' : 'no'
+            }
+          : novedad
+      )
+    );
+    setActiveContactId(null);
+  };
 
-  const pendientesContactar = filteredNovedades.filter(n => !n.contactado).length;
+  const filteredNovedades = useMemo(
+    () =>
+      novedadesData.filter((novedad) => {
+        if (filterWeek === 'todas') return true;
+
+        const fechaContacto = new Date(novedad.fechaContacto);
+        const hoy = new Date();
+        const inicioSemana = new Date(hoy);
+        inicioSemana.setDate(hoy.getDate() - hoy.getDay());
+        const finSemana = new Date(inicioSemana);
+        finSemana.setDate(inicioSemana.getDate() + 6);
+
+        const inicioProximaSemana = new Date(finSemana);
+        inicioProximaSemana.setDate(finSemana.getDate() + 1);
+        const finProximaSemana = new Date(inicioProximaSemana);
+        finProximaSemana.setDate(inicioProximaSemana.getDate() + 6);
+
+        if (filterWeek === 'esta') {
+          return fechaContacto >= inicioSemana && fechaContacto <= finSemana;
+        } else if (filterWeek === 'proxima') {
+          return fechaContacto >= inicioProximaSemana && fechaContacto <= finProximaSemana;
+        }
+
+        return true;
+      }),
+    [filterWeek, novedadesData]
+  );
+
+  const pendientesContactar = filteredNovedades.filter((n) => !n.contactado).length;
 
   return (
     <div className="space-y-6">
@@ -219,7 +264,7 @@ const MantenimientoPreventivo: React.FC = () => {
         <div className="space-y-6">
           {/* Filters */}
           <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center space-x-4">
                 <Filter className="h-5 w-5 text-gray-400" />
                 <select
@@ -240,56 +285,148 @@ const MantenimientoPreventivo: React.FC = () => {
 
           {/* Lista de Novedades */}
           <div className="grid gap-4">
-            {filteredNovedades.map((novedad) => (
-              <div key={novedad.id} className="bg-white rounded-lg p-6 border shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{novedad.cliente}</h3>
-                      <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(novedad.prioridad)}`}>
-                        {getPriorityIcon(novedad.prioridad)}
-                        <span className="capitalize">{novedad.prioridad}</span>
-                      </span>
-                      {novedad.contactado && (
-                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                          Contactado
+            {filteredNovedades.map((novedad) => {
+              const notas = contactNotes[novedad.id] ?? { nota: '', interes: '' };
+              return (
+                <div key={novedad.id} className="bg-white rounded-lg p-6 border shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="text-lg font-semibold text-gray-900">{novedad.cliente}</h3>
+                        <span
+                          className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(
+                            novedad.prioridad
+                          )}`}
+                        >
+                          {getPriorityIcon(novedad.prioridad)}
+                          <span className="capitalize">{novedad.prioridad}</span>
                         </span>
+                        {novedad.contactado && (
+                          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                            <Check className="h-3 w-3" /> Contactado
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                        <div>
+                          <p>
+                            <span className="font-medium">Moto:</span> {novedad.moto} ({novedad.placa})
+                          </p>
+                          <p>
+                            <span className="font-medium">Servicio:</span> {novedad.servicio}
+                          </p>
+                        </div>
+                        <div>
+                          <p>
+                            <span className="font-medium">Último servicio:</span>{' '}
+                            {new Date(novedad.ultimoServicio).toLocaleDateString('es-ES')}
+                          </p>
+                          <p>
+                            <span className="font-medium">Contactar:</span> {new Date(novedad.fechaContacto).toLocaleDateString('es-ES')}
+                          </p>
+                        </div>
+                      </div>
+
+                      {novedad.contactado && (
+                        <div className="rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-900">
+                          <p className="font-medium">Interés: {novedad.interes === 'si' ? 'Sí quiere volver' : 'No está interesado'}</p>
+                          {novedad.nota && <p className="mt-1 text-green-800">Nota: {novedad.nota}</p>}
+                        </div>
                       )}
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                      <div>
-                        <p><span className="font-medium">Moto:</span> {novedad.moto} ({novedad.placa})</p>
-                        <p><span className="font-medium">Servicio:</span> {novedad.servicio}</p>
-                      </div>
-                      <div>
-                        <p><span className="font-medium">Último servicio:</span> {new Date(novedad.ultimoServicio).toLocaleDateString('es-ES')}</p>
-                        <p><span className="font-medium">Contactar:</span> {new Date(novedad.fechaContacto).toLocaleDateString('es-ES')}</p>
-                      </div>
+
+                    <div className="flex flex-col sm:flex-row lg:flex-col gap-3">
+                      <a
+                        href={`tel:${novedad.telefono}`}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm flex items-center justify-center space-x-2 transition-colors duration-200"
+                      >
+                        <Phone className="h-4 w-4" />
+                        <span>{novedad.telefono}</span>
+                      </a>
+
+                      {!novedad.contactado && activeContactId !== novedad.id && (
+                        <button
+                          onClick={() => marcarComoContactado(novedad.id)}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition-colors duration-200"
+                        >
+                          Marcar Contactado
+                        </button>
+                      )}
                     </div>
                   </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <a
-                      href={`tel:${novedad.telefono}`}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm flex items-center space-x-2 transition-colors duration-200"
-                    >
-                      <Phone className="h-4 w-4" />
-                      <span>{novedad.telefono}</span>
-                    </a>
-                    
-                    {!novedad.contactado && (
-                      <button
-                        onClick={() => marcarComoContactado(novedad.id)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition-colors duration-200"
-                      >
-                        Marcar Contactado
-                      </button>
-                    )}
-                  </div>
+
+                  {!novedad.contactado && activeContactId === novedad.id && (
+                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-medium text-gray-900">Registrar contacto</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <span>¿Interesado en volver?</span>
+                          <div className="flex gap-2">
+                            {(['si', 'no'] as const).map((option) => (
+                              <button
+                                key={option}
+                                onClick={() =>
+                                  setContactNotes((prev) => ({
+                                    ...prev,
+                                    [novedad.id]: { ...notas, interes: option }
+                                  }))
+                                }
+                                className={`px-3 py-1 rounded-full border text-xs font-medium transition-colors ${
+                                  notas.interes === option
+                                    ? option === 'si'
+                                      ? 'bg-green-600 text-white border-green-600'
+                                      : 'bg-red-600 text-white border-red-600'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                                }`}
+                              >
+                                {option === 'si' ? 'Sí' : 'No'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Notas del contacto</label>
+                        <textarea
+                          value={notas.nota}
+                          onChange={(e) =>
+                            setContactNotes((prev) => ({
+                              ...prev,
+                              [novedad.id]: { ...notas, nota: e.target.value }
+                            }))
+                          }
+                          className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          rows={3}
+                          placeholder="Ej: Acordamos volver a llamar el lunes"
+                        />
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
+                        <button
+                          onClick={() => setActiveContactId(null)}
+                          className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-100"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => guardarContacto(novedad.id)}
+                          disabled={!notas.interes}
+                          className={`px-4 py-2 rounded-lg text-sm text-white transition-colors ${
+                            notas.interes
+                              ? 'bg-green-600 hover:bg-green-700'
+                              : 'bg-green-300 cursor-not-allowed'
+                          }`}
+                        >
+                          Guardar contacto
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {filteredNovedades.length === 0 && (
               <div className="text-center py-12">
@@ -314,25 +451,39 @@ const MantenimientoPreventivo: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <h3 className="text-lg font-semibold text-gray-900">{mantenimiento.cliente}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        mantenimiento.diasRestantes <= 7 
-                          ? 'bg-red-100 text-red-800' 
-                          : mantenimiento.diasRestantes <= 14
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          mantenimiento.diasRestantes <= 7
+                            ? 'bg-red-100 text-red-800'
+                            : mantenimiento.diasRestantes <= 14
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}
+                      >
                         {mantenimiento.diasRestantes} días restantes
                       </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
                       <div>
-                        <p><span className="font-medium">Moto:</span> {mantenimiento.moto} ({mantenimiento.placa})</p>
-                        <p><span className="font-medium">Servicio:</span> {mantenimiento.servicio}</p>
+                        <p>
+                          <span className="font-medium">Moto:</span> {mantenimiento.moto} ({mantenimiento.placa})
+                        </p>
+                        <p>
+                          <span className="font-medium">Servicio:</span> {mantenimiento.servicio}
+                        </p>
                       </div>
                       <div>
-                        <p><span className="font-medium">Fecha programada:</span> {new Date(mantenimiento.proximoMantenimiento).toLocaleDateString('es-ES')}</p>
-                        <p><span className="font-medium">Kilometraje:</span> {mantenimiento.kilometrajeActual.toLocaleString()} / {mantenimiento.kilometrajeProximo.toLocaleString()} km</p>
+                        <p>
+                          <span className="font-medium">Fecha programada:</span>{' '}
+                          {new Date(mantenimiento.proximoMantenimiento).toLocaleDateString('es-ES')}
+                        </p>
+                        <p>
+                          <span className="font-medium">Kilometraje:</span> {mantenimiento.kilometrajeActual.toLocaleString()}/{
+                            ' '
+                          }
+                          {mantenimiento.kilometrajeProximo.toLocaleString()} km
+                        </p>
                       </div>
                     </div>
 
@@ -343,20 +494,25 @@ const MantenimientoPreventivo: React.FC = () => {
                         <span>{Math.round((mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo) * 100)}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className={`h-2 rounded-full ${
-                            (mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo) >= 0.9
+                            mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo >= 0.9
                               ? 'bg-red-500'
-                              : (mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo) >= 0.7
+                              : mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo >= 0.7
                               ? 'bg-yellow-500'
                               : 'bg-green-500'
                           }`}
-                          style={{ width: `${Math.min((mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo) * 100, 100)}%` }}
+                          style={{
+                            width: `${Math.min(
+                              (mantenimiento.kilometrajeActual / mantenimiento.kilometrajeProximo) * 100,
+                              100
+                            )}%`
+                          }}
                         />
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex flex-col space-y-2">
                     <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors duration-200">
                       Programar Cita
@@ -373,9 +529,7 @@ const MantenimientoPreventivo: React.FC = () => {
               <div className="text-center py-12">
                 <Calendar className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-2 text-sm font-medium text-gray-900">No hay mantenimientos programados</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Todos los mantenimientos están al día.
-                </p>
+                <p className="mt-1 text-sm text-gray-500">Todos los mantenimientos están al día.</p>
               </div>
             )}
           </div>

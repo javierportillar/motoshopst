@@ -1,53 +1,110 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Recycle as Motorcycle, Clock, CheckCircle, AlertCircle, DollarSign, Users, Calendar, TrendingUp } from 'lucide-react';
+import { OrdenTrabajo } from '../types';
 
 interface DashboardProps {
   onPageChange: (page: string) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
-  const stats = [
-    {
-      title: 'Motos en Taller',
-      value: '12',
-      change: '+2 desde ayer',
-      icon: Motorcycle,
-      color: 'bg-blue-500'
-    },
-    {
-      title: 'En Proceso',
-      value: '8',
-      change: '+1 desde ayer',
-      icon: Clock,
-      color: 'bg-yellow-500'
-    },
-    {
-      title: 'Completados Hoy',
-      value: '5',
-      change: '+3 desde ayer',
-      icon: CheckCircle,
-      color: 'bg-green-500'
-    },
-    {
-      title: 'Ingresos del Día',
-      value: '$485.000',
-      change: '+12% vs ayer',
-      icon: DollarSign,
-      color: 'bg-purple-500'
-    }
-  ];
+  const [ordenes, setOrdenes] = useState<OrdenTrabajo[]>([]);
 
-  const urgentes = [
-    { moto: 'Honda CB 160F', cliente: 'Carlos Pérez', servicio: 'Calibración de válvula', tiempo: '2 días' },
-    { moto: 'Yamaha FZ16', cliente: 'Ana García', servicio: 'Cambio de aceite', tiempo: '1 día' },
-    { moto: 'Suzuki GN125', cliente: 'Luis Rojas', servicio: 'Frenos y seguridad', tiempo: '3 días' }
-  ];
+  useEffect(() => {
+    const loadOrdenes = () => {
+      try {
+        const stored = localStorage.getItem('ordenes');
+        setOrdenes(stored ? JSON.parse(stored) : []);
+      } catch (error) {
+        console.error('No se pudieron cargar las órdenes para el dashboard', error);
+        setOrdenes([]);
+      }
+    };
 
-  const proximosMantenimientos = [
-    { cliente: 'María López', moto: 'Honda XR 150L', fecha: '2025-01-15', servicio: 'Mantenimiento 10.000 km' },
-    { cliente: 'Pedro Silva', moto: 'Yamaha YBR 125', fecha: '2025-01-16', servicio: 'Cambio de aceite' },
-    { cliente: 'Sandra Ruiz', moto: 'KTM 200 Duke', fecha: '2025-01-18', servicio: 'Revisión general' }
-  ];
+    loadOrdenes();
+    window.addEventListener('storage', loadOrdenes);
+
+    return () => window.removeEventListener('storage', loadOrdenes);
+  }, []);
+
+  const stats = useMemo(() => {
+    const completadasHoy = ordenes.filter((orden) => {
+      if (orden.estado !== 'completado') return false;
+      const fecha = orden.fecha_entrega_real || orden.fecha_entrega_estimada || orden.fecha_ingreso;
+      const fechaOrden = new Date(fecha);
+      const hoy = new Date();
+      return (
+        fechaOrden.getDate() === hoy.getDate() &&
+        fechaOrden.getMonth() === hoy.getMonth() &&
+        fechaOrden.getFullYear() === hoy.getFullYear()
+      );
+    });
+
+    const ingresosHoy = completadasHoy.reduce((total, orden) => total + (orden.total || 0), 0);
+
+    return [
+      {
+        title: 'Motos en Taller',
+        value: ordenes.length.toString(),
+        change: ordenes.length === 0 ? 'Sin registros aún' : 'Conteo actualizado',
+        icon: Motorcycle,
+        color: 'bg-blue-500'
+      },
+      {
+        title: 'En Proceso',
+        value: ordenes.filter((o) => o.estado === 'en_proceso').length.toString(),
+        change: 'Seguimiento en vivo',
+        icon: Clock,
+        color: 'bg-yellow-500'
+      },
+      {
+        title: 'Completados Hoy',
+        value: completadasHoy.length.toString(),
+        change: completadasHoy.length === 0 ? 'Aún no hay entregas' : 'Listo para entregar',
+        icon: CheckCircle,
+        color: 'bg-green-500'
+      },
+      {
+        title: 'Ingresos del Día',
+        value: `$ ${ingresosHoy.toLocaleString('es-CO')}`,
+        change: ingresosHoy === 0 ? 'Genera una orden para ver ingresos' : 'Calculado con entregas de hoy',
+        icon: DollarSign,
+        color: 'bg-purple-500'
+      }
+    ];
+  }, [ordenes]);
+
+  const urgentes = useMemo(() => {
+    const hoy = new Date();
+    return ordenes
+      .filter((orden) => orden.estado === 'pendiente' || orden.estado === 'en_proceso')
+      .map((orden) => {
+        const fechaEntrega = new Date(orden.fecha_entrega_estimada || orden.fecha_ingreso);
+        const diffMs = fechaEntrega.getTime() - hoy.getTime();
+        const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+        return {
+          moto: `${orden.moto?.marca || ''} ${orden.moto?.modelo || ''}`.trim(),
+          cliente: orden.moto?.cliente?.nombre || 'Cliente por registrar',
+          servicio: `${orden.servicios?.length || 0} servicio(s)` ,
+          diasRestantes,
+          tiempoLabel: diasRestantes <= 0 ? 'Entrega hoy' : `${diasRestantes} día(s)`
+        };
+      })
+      .sort((a, b) => a.diasRestantes - b.diasRestantes)
+      .slice(0, 4);
+  }, [ordenes]);
+
+  const proximosMantenimientos = useMemo(() => {
+    return ordenes
+      .filter((orden) => orden.estado === 'completado' || orden.estado === 'entregado')
+      .slice(0, 4)
+      .map((orden) => ({
+        cliente: orden.moto?.cliente?.nombre || 'Cliente por registrar',
+        moto: `${orden.moto?.marca || ''} ${orden.moto?.modelo || ''}`.trim(),
+        fecha: orden.fecha_entrega_estimada,
+        servicio: `${orden.servicios?.length || 0} servicio(s)`
+      }));
+  }, [ordenes]);
 
   return (
     <div className="space-y-6">
@@ -85,17 +142,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
             <AlertCircle className="h-5 w-5 text-red-500" />
           </div>
           <div className="space-y-4">
-            {urgentes.map((trabajo, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
-                <div>
-                  <p className="font-medium text-gray-900">{trabajo.moto}</p>
-                  <p className="text-sm text-gray-600">{trabajo.cliente} • {trabajo.servicio}</p>
+            {urgentes.length === 0 ? (
+              <p className="text-sm text-gray-600">Sin órdenes en curso. Crea una nueva orden para empezar.</p>
+            ) : (
+              urgentes.map((trabajo, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
+                  <div>
+                    <p className="font-medium text-gray-900">{trabajo.moto || 'Moto por registrar'}</p>
+                    <p className="text-sm text-gray-600">{trabajo.cliente} • {trabajo.servicio}</p>
+                  </div>
+                  <span className="text-sm font-medium text-red-600 bg-red-100 px-2 py-1 rounded">
+                    {trabajo.tiempoLabel}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-red-600 bg-red-100 px-2 py-1 rounded">
-                  {trabajo.tiempo}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           <button 
             onClick={() => onPageChange('ordenes')}
@@ -112,17 +173,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
             <Calendar className="h-5 w-5 text-blue-500" />
           </div>
           <div className="space-y-4">
-            {proximosMantenimientos.map((mantenimiento, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div>
-                  <p className="font-medium text-gray-900">{mantenimiento.cliente}</p>
-                  <p className="text-sm text-gray-600">{mantenimiento.moto} • {mantenimiento.servicio}</p>
+            {proximosMantenimientos.length === 0 ? (
+              <p className="text-sm text-gray-600">Registra y entrega órdenes para ver los próximos mantenimientos.</p>
+            ) : (
+              proximosMantenimientos.map((mantenimiento, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div>
+                    <p className="font-medium text-gray-900">{mantenimiento.cliente}</p>
+                    <p className="text-sm text-gray-600">{mantenimiento.moto} • {mantenimiento.servicio}</p>
+                  </div>
+                  <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                    {mantenimiento.fecha ? new Date(mantenimiento.fecha).toLocaleDateString('es-ES') : 'Fecha por definir'}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                  {new Date(mantenimiento.fecha).toLocaleDateString('es-ES')}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           <button 
             onClick={() => onPageChange('preventivo')}
