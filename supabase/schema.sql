@@ -88,6 +88,9 @@ create table if not exists mecanicos (
   updated_at timestamptz not null default now()
 );
 
+-- Asegura que RLS esté habilitado antes de aplicar políticas
+alter table if exists mecanicos enable row level security;
+
 create table if not exists orden_mano_obra (
   id uuid primary key default uuid_generate_v4(),
   orden_trabajo_id uuid not null references ordenes_trabajo(id) on delete cascade,
@@ -191,6 +194,52 @@ BEGIN
     CREATE POLICY "Anon puede insertar motos"
       ON motos FOR INSERT
       TO anon
+      WITH CHECK (true);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'mecanicos'
+      AND policyname = 'Anon puede leer mecanicos'
+  ) THEN
+    CREATE POLICY "Anon puede leer mecanicos"
+      ON mecanicos FOR SELECT
+      TO anon
+      USING (true);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'mecanicos'
+      AND policyname = 'Anon puede insertar mecanicos'
+  ) THEN
+    CREATE POLICY "Anon puede insertar mecanicos"
+      ON mecanicos FOR INSERT
+      TO anon
+      WITH CHECK (true);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'mecanicos'
+      AND policyname = 'Anon puede actualizar mecanicos'
+  ) THEN
+    CREATE POLICY "Anon puede actualizar mecanicos"
+      ON mecanicos FOR UPDATE
+      TO anon
+      USING (true)
       WITH CHECK (true);
   END IF;
 END$$;

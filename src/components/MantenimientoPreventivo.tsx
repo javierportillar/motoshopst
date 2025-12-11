@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Bell, Phone, Clock, AlertTriangle, CheckCircle, Filter, Check } from 'lucide-react';
+import { Calendar, Bell, Phone, Clock, AlertTriangle, CheckCircle, Filter, Check, X } from 'lucide-react';
 
 type WeekFilterOption = 'esta' | 'proxima' | 'todas';
 
@@ -16,6 +16,29 @@ type Novedad = {
   contactado: boolean;
   interes?: 'si' | 'no';
   nota?: string;
+};
+
+type EventoHistorial = {
+  fecha: string;
+  descripcion: string;
+  observaciones?: string;
+};
+
+type MantenimientoProgramado = {
+  id: string;
+  cliente: string;
+  moto: string;
+  placa: string;
+  servicio: string;
+  proximoMantenimiento: string;
+  kilometrajeActual: number;
+  kilometrajeProximo: number;
+  diasRestantes: number;
+  historial: EventoHistorial[];
+  citaProgramada?: {
+    fecha: string;
+    nota?: string;
+  };
 };
 
 const MantenimientoPreventivo: React.FC = () => {
@@ -89,16 +112,12 @@ const MantenimientoPreventivo: React.FC = () => {
   ]);
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   const [contactNotes, setContactNotes] = useState<Record<string, { nota: string; interes: 'si' | 'no' | '' }>>({});
-
-  const handleFilterWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const { value } = event.target;
-    if (value === 'esta' || value === 'proxima' || value === 'todas') {
-      setFilterWeek(value);
-    }
-  };
-
-  // Mock data for scheduled maintenance
-  const mantenimientosProgramados = [
+  const [selectedMantenimiento, setSelectedMantenimiento] = useState<MantenimientoProgramado | null>(null);
+  const [modalAction, setModalAction] = useState<'programar' | 'historial' | null>(null);
+  const [citaFecha, setCitaFecha] = useState('');
+  const [citaNota, setCitaNota] = useState('');
+  const [agendando, setAgendando] = useState(false);
+  const [mantenimientosProgramados, setMantenimientosProgramados] = useState<MantenimientoProgramado[]>([
     {
       id: '1',
       cliente: 'Sandra Ruiz',
@@ -108,7 +127,11 @@ const MantenimientoPreventivo: React.FC = () => {
       proximoMantenimiento: '2025-01-20',
       kilometrajeActual: 4800,
       kilometrajeProximo: 5000,
-      diasRestantes: 8
+      diasRestantes: 8,
+      historial: [
+        { fecha: '2024-08-18', descripcion: 'Ajuste de válvulas y torque de culata' },
+        { fecha: '2024-10-12', descripcion: 'Cambio de líquido de frenos', observaciones: 'Se usó DOT 4' }
+      ]
     },
     {
       id: '2',
@@ -119,7 +142,11 @@ const MantenimientoPreventivo: React.FC = () => {
       proximoMantenimiento: '2025-01-25',
       kilometrajeActual: 8900,
       kilometrajeProximo: 9000,
-      diasRestantes: 13
+      diasRestantes: 13,
+      historial: [
+        { fecha: '2024-07-02', descripcion: 'Cambio de kit de arrastre', observaciones: 'Se ajustó tensión' },
+        { fecha: '2024-11-05', descripcion: 'Cambio de aceite y filtro' }
+      ]
     },
     {
       id: '3',
@@ -130,9 +157,62 @@ const MantenimientoPreventivo: React.FC = () => {
       proximoMantenimiento: '2025-02-01',
       kilometrajeActual: 12000,
       kilometrajeProximo: 12500,
-      diasRestantes: 20
+      diasRestantes: 20,
+      historial: [
+        { fecha: '2024-06-15', descripcion: 'Revisión de frenos' },
+        { fecha: '2024-09-20', descripcion: 'Ajuste de suspensión delantera', observaciones: 'Se cambiaron retenedores' }
+      ]
     }
-  ];
+  ]);
+
+  const handleFilterWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    if (value === 'esta' || value === 'proxima' || value === 'todas') {
+      setFilterWeek(value);
+    }
+  };
+
+  const abrirProgramarCita = (mantenimiento: MantenimientoProgramado) => {
+    setSelectedMantenimiento(mantenimiento);
+    setModalAction('programar');
+    setCitaFecha(mantenimiento.citaProgramada?.fecha || mantenimiento.proximoMantenimiento);
+    setCitaNota(mantenimiento.citaProgramada?.nota || '');
+  };
+
+  const abrirHistorial = (mantenimiento: MantenimientoProgramado) => {
+    setSelectedMantenimiento(mantenimiento);
+    setModalAction('historial');
+  };
+
+  const cerrarModal = () => {
+    setSelectedMantenimiento(null);
+    setModalAction(null);
+    setCitaFecha('');
+    setCitaNota('');
+    setAgendando(false);
+  };
+
+  const confirmarCita = () => {
+    if (!selectedMantenimiento || !citaFecha) return;
+    setAgendando(true);
+    setMantenimientosProgramados((prev) =>
+      prev.map((mantenimiento) =>
+        mantenimiento.id === selectedMantenimiento.id
+          ? {
+              ...mantenimiento,
+              proximoMantenimiento: citaFecha,
+              citaProgramada: {
+                fecha: citaFecha,
+                nota: citaNota.trim() || undefined
+              }
+            }
+          : mantenimiento
+      )
+    );
+    setAgendando(false);
+    cerrarModal();
+  };
+
 
   const getPriorityColor = (prioridad: string) => {
     switch (prioridad) {
@@ -216,11 +296,12 @@ const MantenimientoPreventivo: React.FC = () => {
   const pendientesContactar = filteredNovedades.filter((n) => !n.contactado).length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold text-gray-900">Mantenimiento Preventivo</h2>
-        <p className="text-gray-600 mt-1">Seguimiento y notificaciones de mantenimiento</p>
-      </div>
+    <>
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">Mantenimiento Preventivo</h2>
+          <p className="text-gray-600 mt-1">Seguimiento y notificaciones de mantenimiento</p>
+        </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -514,14 +595,31 @@ const MantenimientoPreventivo: React.FC = () => {
                   </div>
 
                   <div className="flex flex-col space-y-2">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors duration-200">
+                    <button
+                      onClick={() => abrirProgramarCita(mantenimiento)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors duration-200"
+                    >
                       Programar Cita
                     </button>
-                    <button className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors duration-200">
+                    <button
+                      onClick={() => abrirHistorial(mantenimiento)}
+                      className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors duration-200"
+                    >
                       Ver Historial
                     </button>
                   </div>
                 </div>
+
+                {mantenimiento.citaProgramada && (
+                  <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                    <p className="font-medium">
+                      Cita programada para {new Date(mantenimiento.citaProgramada.fecha).toLocaleDateString('es-ES')}
+                    </p>
+                    {mantenimiento.citaProgramada.nota && (
+                      <p className="mt-1 text-blue-800">{mantenimiento.citaProgramada.nota}</p>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
 
@@ -535,7 +633,107 @@ const MantenimientoPreventivo: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+
+      {modalAction && selectedMantenimiento && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 px-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm text-gray-500">
+                  {selectedMantenimiento.cliente} • {selectedMantenimiento.moto} ({selectedMantenimiento.placa})
+                </p>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {modalAction === 'programar' ? 'Programar cita' : 'Historial de mantenimiento'}
+                </h3>
+              </div>
+              <button
+                onClick={cerrarModal}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {modalAction === 'programar' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-600">
+                  <p>
+                    <span className="font-medium">Servicio:</span> {selectedMantenimiento.servicio}
+                  </p>
+                  <p>
+                    <span className="font-medium">Fecha sugerida:</span>{' '}
+                    {new Date(selectedMantenimiento.proximoMantenimiento).toLocaleDateString('es-ES')}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de la cita</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={citaFecha}
+                    onChange={(e) => setCitaFecha(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notas para el equipo</label>
+                  <textarea
+                    value={citaNota}
+                    onChange={(e) => setCitaNota(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                    rows={3}
+                    placeholder="Ej: Confirmar disponibilidad de repuestos o preferencia de horario"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={cerrarModal}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarCita}
+                    disabled={agendando || !citaFecha}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {agendando ? 'Guardando...' : 'Guardar cita'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {selectedMantenimiento.historial.length > 0 ? (
+                  [...selectedMantenimiento.historial]
+                    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+                    .map((evento) => (
+                      <div
+                        key={`${selectedMantenimiento.id}-${evento.fecha}-${evento.descripcion}`}
+                        className="border border-gray-200 rounded-lg p-3"
+                      >
+                        <p className="text-sm text-gray-500">
+                          {new Date(evento.fecha).toLocaleDateString('es-ES')}
+                        </p>
+                        <p className="font-medium text-gray-900">{evento.descripcion}</p>
+                        {evento.observaciones && (
+                          <p className="text-sm text-gray-700 mt-1">{evento.observaciones}</p>
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  <p className="text-sm text-gray-600">Aún no hay historial registrado para este mantenimiento.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

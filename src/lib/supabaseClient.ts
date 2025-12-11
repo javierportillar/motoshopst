@@ -17,14 +17,6 @@ export const ensureSupabaseSession = async () => {
     return;
   }
 
-  if (!data.session) {
-    const { error: signInError } = await supabase.auth.signInAnonymously();
-
-    if (signInError) {
-      console.warn(
-        'El inicio de sesión anónimo no está disponible; usa el rol público (anon) y asegúrate de tener políticas RLS para este rol.',
-        signInError
-      );
-    }
-  }
+  // Si no existe sesión, seguimos con el rol público (anon) sin intentar sign-up anónimo para evitar errores 422.
+  if (!data.session) return;
 };

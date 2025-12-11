@@ -32,6 +32,7 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit, or
   const [clientesGuardados, setClientesGuardados] = useState<ClienteRegistro[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteRegistro | null>(null);
   const [mecanicos, setMecanicos] = useState<Mecanico[]>([]);
+  const [cargandoMecanicos, setCargandoMecanicos] = useState(false);
   const [mecanicoId, setMecanicoId] = useState('');
   const [valorManoObra, setValorManoObra] = useState(0);
 
@@ -137,37 +138,92 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit, or
     void cargarClientes();
   }, [cargarClientes]);
 
-  useEffect(() => {
+  const cargarMecanicos = useCallback(async () => {
+    setCargandoMecanicos(true);
+    let cargado = false;
+    const baseMecanicos: Mecanico[] = [
+      {
+        id: 'mec-1',
+        nombre: 'Juan Torres',
+        especialidad: 'Motor y diagnóstico',
+        trabajos_realizados: 0,
+        balance_mano_obra: 0,
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'mec-2',
+        nombre: 'Laura Méndez',
+        especialidad: 'Frenos y suspensión',
+        trabajos_realizados: 0,
+        balance_mano_obra: 0,
+        updated_at: new Date().toISOString()
+      }
+    ];
     try {
-      const storedMecanicos = localStorage.getItem(STORAGE_MECANICOS);
-      if (storedMecanicos) {
-        setMecanicos(JSON.parse(storedMecanicos));
-        return;
+      await ensureSupabaseSession();
+      const { data, error } = await supabase
+        .from('mecanicos')
+        .select('id, nombre, telefono, especialidad, trabajos_realizados, balance_mano_obra, updated_at')
+        .order('nombre');
+
+      if (error) {
+        throw error;
       }
 
-      const baseMecanicos: Mecanico[] = [
-        {
-          id: 'mec-1',
-          nombre: 'Juan Torres',
-          especialidad: 'Motor y diagnóstico',
-          trabajos_realizados: 0,
-          balance_mano_obra: 0,
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: 'mec-2',
-          nombre: 'Laura Méndez',
-          especialidad: 'Frenos y suspensión',
-          trabajos_realizados: 0,
-          balance_mano_obra: 0,
-          updated_at: new Date().toISOString()
-        }
-      ];
-
-      setMecanicos(baseMecanicos);
-      localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(baseMecanicos));
+      if (data && data.length > 0) {
+        const registros = data.map((mecanico) => ({
+          id: mecanico.id,
+          nombre: mecanico.nombre,
+          telefono: mecanico.telefono || undefined,
+          especialidad: mecanico.especialidad || undefined,
+          trabajos_realizados: mecanico.trabajos_realizados ?? 0,
+          balance_mano_obra: Number(mecanico.balance_mano_obra ?? 0),
+          updated_at: mecanico.updated_at || new Date().toISOString()
+        }));
+        setMecanicos(registros);
+        localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(registros));
+        cargado = true;
+      }
     } catch (error) {
-      console.error('No se pudieron cargar los mecánicos', error);
+      console.error('No se pudieron cargar los mecánicos desde Supabase', error);
+    }
+
+    if (!cargado) {
+      try {
+        const storedMecanicos = localStorage.getItem(STORAGE_MECANICOS);
+        const locales = storedMecanicos ? JSON.parse(storedMecanicos) : [];
+        if (locales.length > 0) {
+          setMecanicos(locales);
+        } else {
+          setMecanicos(baseMecanicos);
+          localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(baseMecanicos));
+        }
+      } catch (error) {
+        console.error('No se pudieron cargar los mecánicos locales', error);
+        setMecanicos(baseMecanicos);
+      }
+    }
+
+    setCargandoMecanicos(false);
+  }, []);
+
+  useEffect(() => {
+    void cargarMecanicos();
+  }, [cargarMecanicos]);
+
+  const persistirMecanico = useCallback(async (mecanico: Mecanico) => {
+    try {
+      await ensureSupabaseSession();
+      await supabase
+        .from('mecanicos')
+        .update({
+          balance_mano_obra: mecanico.balance_mano_obra,
+          trabajos_realizados: mecanico.trabajos_realizados,
+          updated_at: mecanico.updated_at
+        })
+        .eq('id', mecanico.id);
+    } catch (error) {
+      console.error('No se pudo actualizar la información del mecánico en Supabase', error);
     }
   }, []);
 
@@ -325,6 +381,12 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit, or
               }
             : mecanico
         );
+
+        const mecanicoActualizado = actualizados.find((m) => m.id === id);
+        if (mecanicoActualizado) {
+          void persistirMecanico(mecanicoActualizado);
+        }
+
         localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(actualizados));
         return actualizados;
       });
@@ -774,15 +836,19 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit, or
               <select
                 value={mecanicoId}
                 onChange={(e) => setMecanicoId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                disabled={cargandoMecanicos}
                 required
               >
-                <option value="">Selecciona un mecánico</option>
-                {mecanicos.map((mecanico) => (
-                  <option key={mecanico.id} value={mecanico.id}>
-                    {mecanico.nombre} {mecanico.especialidad ? `• ${mecanico.especialidad}` : ''}
-                  </option>
-                ))}
+                <option value="">
+                  {cargandoMecanicos ? 'Cargando mecánicos...' : 'Selecciona un mecánico'}
+                </option>
+                {!cargandoMecanicos &&
+                  mecanicos.map((mecanico) => (
+                    <option key={mecanico.id} value={mecanico.id}>
+                      {mecanico.nombre} {mecanico.especialidad ? `• ${mecanico.especialidad}` : ''}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>

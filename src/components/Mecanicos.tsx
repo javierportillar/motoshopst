@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Wrench, Plus, Phone, DollarSign, ClipboardList } from 'lucide-react';
 import { Mecanico } from '../types';
+import { ensureSupabaseSession, supabase } from '../lib/supabaseClient';
 
 const STORAGE_MECANICOS = 'mecanicos';
 
@@ -14,38 +15,133 @@ const Mecanicos: React.FC = () => {
   const [mecanicos, setMecanicos] = useState<Mecanico[]>([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [formState, setFormState] = useState<FormState>({ nombre: '', telefono: '', especialidad: '' });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const cargarMecanicos = useCallback(async () => {
+    setIsLoading(true);
+    let cargado = false;
+    const baseMecanicos: Mecanico[] = [
+      {
+        id: 'mec-1',
+        nombre: 'Juan Torres',
+        especialidad: 'Motor y diagnóstico',
+        trabajos_realizados: 0,
+        balance_mano_obra: 0,
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'mec-2',
+        nombre: 'Laura Méndez',
+        especialidad: 'Frenos y suspensión',
+        trabajos_realizados: 0,
+        balance_mano_obra: 0,
+        updated_at: new Date().toISOString()
+      }
+    ];
+    try {
+      await ensureSupabaseSession();
+      const { data, error } = await supabase
+        .from('mecanicos')
+        .select('id, nombre, telefono, especialidad, trabajos_realizados, balance_mano_obra, updated_at')
+        .order('nombre');
+
+      if (error) {
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const registros = data.map((mecanico) => ({
+          id: mecanico.id,
+          nombre: mecanico.nombre,
+          telefono: mecanico.telefono || undefined,
+          especialidad: mecanico.especialidad || undefined,
+          trabajos_realizados: mecanico.trabajos_realizados ?? 0,
+          balance_mano_obra: Number(mecanico.balance_mano_obra ?? 0),
+          updated_at: mecanico.updated_at || new Date().toISOString()
+        }));
+
+        setMecanicos(registros);
+        localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(registros));
+        cargado = true;
+      }
+    } catch (error) {
+      console.error('No se pudieron cargar los mecánicos desde Supabase', error);
+    }
+
+    if (!cargado) {
+      try {
+        const stored = localStorage.getItem(STORAGE_MECANICOS);
+        const locales = stored ? JSON.parse(stored) : [];
+        if (locales.length > 0) {
+          setMecanicos(locales);
+        } else {
+          setMecanicos(baseMecanicos);
+          localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(baseMecanicos));
+        }
+      } catch (error) {
+        console.error('No se pudieron cargar los mecánicos desde almacenamiento local', error);
+        setMecanicos(baseMecanicos);
+      }
+    }
+
+    setIsLoading(false);
+  }, []);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_MECANICOS);
-      if (stored) {
-        setMecanicos(JSON.parse(stored));
-        return;
-      }
-      setMecanicos([]);
-    } catch (error) {
-      console.error('No se pudieron cargar los mecánicos', error);
-    }
-  }, []);
+    void cargarMecanicos();
+  }, [cargarMecanicos]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(mecanicos));
   }, [mecanicos]);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const nuevo: Mecanico = {
-      id: `mec-${Date.now()}`,
-      nombre: formState.nombre,
-      telefono: formState.telefono || undefined,
-      especialidad: formState.especialidad || undefined,
-      balance_mano_obra: 0,
-      trabajos_realizados: 0,
-      updated_at: new Date().toISOString()
-    };
-    setMecanicos((prev) => [...prev, nuevo]);
-    setFormState({ nombre: '', telefono: '', especialidad: '' });
-    setMostrarFormulario(false);
+
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      await ensureSupabaseSession();
+
+      const { data, error } = await supabase
+        .from('mecanicos')
+        .insert({
+          nombre: formState.nombre,
+          telefono: formState.telefono || null,
+          especialidad: formState.especialidad || null
+        })
+        .select('id, nombre, telefono, especialidad, trabajos_realizados, balance_mano_obra, updated_at')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      const nuevo: Mecanico = {
+        id: data.id,
+        nombre: data.nombre,
+        telefono: data.telefono || undefined,
+        especialidad: data.especialidad || undefined,
+        balance_mano_obra: Number(data.balance_mano_obra ?? 0),
+        trabajos_realizados: data.trabajos_realizados ?? 0,
+        updated_at: data.updated_at || new Date().toISOString()
+      };
+
+      setMecanicos((prev) => {
+        const actualizados = [...prev, nuevo];
+        localStorage.setItem(STORAGE_MECANICOS, JSON.stringify(actualizados));
+        return actualizados;
+      });
+
+      setFormState({ nombre: '', telefono: '', especialidad: '' });
+      setMostrarFormulario(false);
+    } catch (error) {
+      console.error('No se pudo registrar el mecánico', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const totalBalance = useMemo(
@@ -136,9 +232,10 @@ const Mecanicos: React.FC = () => {
             <div className="md:col-span-3 flex space-x-3">
               <button
                 type="submit"
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
+                disabled={isSaving}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Guardar
+                {isSaving ? 'Guardando...' : 'Guardar'}
               </button>
               <button
                 type="button"
@@ -182,9 +279,16 @@ const Mecanicos: React.FC = () => {
                 </td>
               </tr>
             ))}
+            {isLoading && (
+              <tr>
+                <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                  Cargando mecánicos...
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
-        {mecanicos.length === 0 && (
+        {!isLoading && mecanicos.length === 0 && (
           <p className="text-center text-sm text-gray-500 py-6">Aún no hay mecánicos registrados.</p>
         )}
       </div>
