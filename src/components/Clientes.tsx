@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { UserPlus, Search, Phone, Mail, MapPin, Bike as Motorcycle, Clock, ClipboardList, Plus } from 'lucide-react';
 import { Cliente, Moto, OrdenTrabajo } from '../types';
+import { ensureSupabaseSession, supabase } from '../lib/supabaseClient';
 
 interface ClienteRegistro {
   cliente: Cliente;
@@ -22,16 +23,14 @@ interface ClienteFormState {
   motoAnio: number;
 }
 
-const STORAGE_CLIENTES = 'clientesExtras';
 const STORAGE_ORDENES = 'ordenes';
-
-const crearId = (prefijo: string) => `${prefijo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 const Clientes: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [clientesExtras, setClientesExtras] = useState<ClienteRegistro[]>([]);
   const [ordenesRegistradas, setOrdenesRegistradas] = useState<OrdenTrabajo[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [formState, setFormState] = useState<ClienteFormState>({
     nombre: '',
@@ -47,16 +46,76 @@ const Clientes: React.FC = () => {
     motoAnio: new Date().getFullYear()
   });
 
-  useEffect(() => {
+  type MotoRow = {
+    id: string;
+    cliente_id: string;
+    marca: string;
+    modelo: string;
+    anio: number;
+    placa: string;
+    kilometraje: number;
+    color: string;
+    created_at: string;
+  };
+
+  type ClienteRow = {
+    id: string;
+    nombre: string;
+    telefono: string;
+    email: string | null;
+    cedula: string;
+    direccion: string | null;
+    created_at: string;
+    motos: MotoRow[] | null;
+  };
+
+  const cargarClientes = useCallback(async () => {
     try {
-      const storedClientes = localStorage.getItem(STORAGE_CLIENTES);
-      if (storedClientes) {
-        setClientesExtras(JSON.parse(storedClientes));
+      await ensureSupabaseSession();
+
+      const { data, error } = await supabase
+        .from('clientes')
+        .select(
+          'id, nombre, telefono, email, cedula, direccion, created_at, motos(id, cliente_id, marca, modelo, anio, placa, kilometraje, color, created_at)'
+        )
+        .order('nombre');
+
+      if (error) {
+        throw error;
       }
+
+      const registros: ClienteRegistro[] = (data || []).map((cliente: ClienteRow) => ({
+        cliente: {
+          id: cliente.id,
+          nombre: cliente.nombre,
+          telefono: cliente.telefono,
+          email: cliente.email || undefined,
+          cedula: cliente.cedula,
+          direccion: cliente.direccion || undefined,
+          created_at: cliente.created_at
+        },
+        motos: (cliente.motos || []).map((moto) => ({
+          id: moto.id,
+          cliente_id: moto.cliente_id,
+          marca: moto.marca,
+          modelo: moto.modelo,
+          año: moto.anio,
+          placa: moto.placa,
+          kilometraje: moto.kilometraje,
+          color: moto.color,
+          created_at: moto.created_at
+        }))
+      }));
+
+      setClientesExtras(registros);
     } catch (error) {
-      console.error('No se pudieron cargar los clientes guardados', error);
+      console.error('No se pudieron cargar los clientes desde Supabase', error);
     }
   }, []);
+
+  useEffect(() => {
+    void cargarClientes();
+  }, [cargarClientes]);
 
   useEffect(() => {
     try {
@@ -68,10 +127,6 @@ const Clientes: React.FC = () => {
       console.error('No se pudieron cargar las órdenes guardadas', error);
     }
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_CLIENTES, JSON.stringify(clientesExtras));
-  }, [clientesExtras]);
 
   const clientesDesdeOrdenes = useMemo(() => {
     const map = new Map<string, ClienteRegistro>();
@@ -138,55 +193,94 @@ const Clientes: React.FC = () => {
     });
   }, [clientes, searchTerm]);
 
-  const handleSubmitCliente = (event: React.FormEvent) => {
+  const handleSubmitCliente = async (event: React.FormEvent) => {
     event.preventDefault();
+    setIsSaving(true);
 
-    const timestamp = Date.now();
-    const clienteId = crearId('cliente');
-    const motoId = crearId('moto');
+    try {
+      await ensureSupabaseSession();
 
-    const nuevoCliente: Cliente = {
-      id: clienteId,
-      nombre: formState.nombre,
-      cedula: formState.cedula,
-      telefono: formState.telefono,
-      email: formState.email || undefined,
-      direccion: formState.direccion || undefined,
-      created_at: new Date(timestamp).toISOString()
-    };
+      const { data: clienteInsertado, error: clienteError } = await supabase
+        .from('clientes')
+        .insert({
+          nombre: formState.nombre,
+          telefono: formState.telefono,
+          email: formState.email || null,
+          cedula: formState.cedula,
+          direccion: formState.direccion || null
+        })
+        .select('id, nombre, telefono, email, cedula, direccion, created_at')
+        .single();
 
-    const nuevaMoto: Moto = {
-      id: motoId,
-      cliente_id: clienteId,
-      marca: formState.motoMarca,
-      modelo: formState.motoModelo,
-      año: formState.motoAnio,
-      placa: formState.motoPlaca.toUpperCase(),
-      kilometraje: formState.motoKilometraje,
-      color: formState.motoColor,
-      created_at: new Date(timestamp).toISOString()
-    };
+      if (clienteError) {
+        throw clienteError;
+      }
 
-    const nuevoRegistro: ClienteRegistro = {
-      cliente: nuevoCliente,
-      motos: [nuevaMoto]
-    };
+      const { data: motoInsertada, error: motoError } = await supabase
+        .from('motos')
+        .insert({
+          cliente_id: clienteInsertado.id,
+          marca: formState.motoMarca,
+          modelo: formState.motoModelo,
+          anio: formState.motoAnio,
+          placa: formState.motoPlaca.toUpperCase(),
+          kilometraje: formState.motoKilometraje,
+          color: formState.motoColor
+        })
+        .select('id, cliente_id, marca, modelo, anio, placa, kilometraje, color, created_at')
+        .single();
 
-    setClientesExtras((prev) => [...prev, nuevoRegistro]);
-    setShowForm(false);
-    setFormState({
-      nombre: '',
-      cedula: '',
-      telefono: '',
-      email: '',
-      direccion: '',
-      motoMarca: '',
-      motoModelo: '',
-      motoPlaca: '',
-      motoColor: '',
-      motoKilometraje: 0,
-      motoAnio: new Date().getFullYear()
-    });
+      if (motoError) {
+        throw motoError;
+      }
+
+      const nuevoCliente: Cliente = {
+        id: clienteInsertado.id,
+        nombre: clienteInsertado.nombre,
+        telefono: clienteInsertado.telefono,
+        email: clienteInsertado.email || undefined,
+        cedula: clienteInsertado.cedula,
+        direccion: clienteInsertado.direccion || undefined,
+        created_at: clienteInsertado.created_at
+      };
+
+      const nuevaMoto: Moto = {
+        id: motoInsertada.id,
+        cliente_id: motoInsertada.cliente_id,
+        marca: motoInsertada.marca,
+        modelo: motoInsertada.modelo,
+        año: motoInsertada.anio,
+        placa: motoInsertada.placa,
+        kilometraje: motoInsertada.kilometraje,
+        color: motoInsertada.color,
+        created_at: motoInsertada.created_at
+      };
+
+      const nuevoRegistro: ClienteRegistro = {
+        cliente: nuevoCliente,
+        motos: [nuevaMoto]
+      };
+
+      setClientesExtras((prev) => [...prev, nuevoRegistro]);
+      setShowForm(false);
+      setFormState({
+        nombre: '',
+        cedula: '',
+        telefono: '',
+        email: '',
+        direccion: '',
+        motoMarca: '',
+        motoModelo: '',
+        motoPlaca: '',
+        motoColor: '',
+        motoKilometraje: 0,
+        motoAnio: new Date().getFullYear()
+      });
+    } catch (error) {
+      console.error('No se pudo registrar el cliente', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const totalMotos = clientes.reduce((acc, registro) => acc + registro.motos.length, 0);
@@ -453,9 +547,10 @@ const Clientes: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Guardar cliente
+                  {isSaving ? 'Guardando...' : 'Guardar cliente'}
                 </button>
               </div>
             </form>

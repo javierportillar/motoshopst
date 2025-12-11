@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Trash2, User, Recycle as Motorcycle, Wrench, Clock3 } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -10,6 +10,7 @@ import type {
   Servicio
 } from '../types';
 import { useServicios } from '../context/ServiciosContext';
+import { ensureSupabaseSession, supabase } from '../lib/supabaseClient';
 
 interface FormularioOrdenProps {
   onClose: () => void;
@@ -22,8 +23,6 @@ interface ClienteRegistro {
   motos: MotoType[];
 }
 
-const STORAGE_CLIENTES = 'clientesExtras';
-const STORAGE_ORDENES = 'ordenes';
 const STORAGE_MECANICOS = 'mecanicos';
 
 const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit, ordenEdicion }) => {
@@ -67,35 +66,76 @@ const FormularioOrden: React.FC<FormularioOrdenProps> = ({ onClose, onSubmit, or
   const [observacionesGenerales, setObservacionesGenerales] = useState('');
   const [fechaEntregaEstimada, setFechaEntregaEstimada] = useState('');
 
-  useEffect(() => {
+  type MotoRow = {
+    id: string;
+    cliente_id: string;
+    marca: string;
+    modelo: string;
+    anio: number;
+    placa: string;
+    kilometraje: number;
+    color: string;
+    created_at: string;
+  };
+
+  type ClienteRow = {
+    id: string;
+    nombre: string;
+    telefono: string;
+    email: string | null;
+    cedula: string;
+    direccion: string | null;
+    created_at: string;
+    motos: MotoRow[] | null;
+  };
+
+  const cargarClientes = useCallback(async () => {
     try {
-      const storedClientes = localStorage.getItem(STORAGE_CLIENTES);
-      const storedOrdenes = localStorage.getItem(STORAGE_ORDENES);
-      const registros: ClienteRegistro[] = [];
+      await ensureSupabaseSession();
 
-      if (storedOrdenes) {
-        const ordenes: OrdenTrabajoType[] = JSON.parse(storedOrdenes);
-        const map = new Map<string, ClienteRegistro>();
-        ordenes.forEach((orden) => {
-          if (!orden.moto?.cliente || !orden.moto) return;
-          const existente = map.get(orden.moto.cliente.id) || { cliente: orden.moto.cliente, motos: [] };
-          if (!existente.motos.some((m) => m.id === orden.moto?.id) && orden.moto) {
-            existente.motos.push(orden.moto);
-          }
-          map.set(orden.moto.cliente.id, existente);
-        });
-        registros.push(...map.values());
+      const { data, error } = await supabase
+        .from('clientes')
+        .select(
+          'id, nombre, telefono, email, cedula, direccion, created_at, motos(id, cliente_id, marca, modelo, anio, placa, kilometraje, color, created_at)'
+        )
+        .order('nombre');
+
+      if (error) {
+        throw error;
       }
 
-      if (storedClientes) {
-        registros.push(...JSON.parse(storedClientes));
-      }
+      const registros: ClienteRegistro[] = (data || []).map((cliente: ClienteRow) => ({
+        cliente: {
+          id: cliente.id,
+          nombre: cliente.nombre,
+          telefono: cliente.telefono,
+          email: cliente.email || undefined,
+          cedula: cliente.cedula,
+          direccion: cliente.direccion || undefined,
+          created_at: cliente.created_at
+        },
+        motos: (cliente.motos || []).map((moto) => ({
+          id: moto.id,
+          cliente_id: moto.cliente_id,
+          marca: moto.marca,
+          modelo: moto.modelo,
+          año: moto.anio,
+          placa: moto.placa,
+          kilometraje: moto.kilometraje,
+          color: moto.color,
+          created_at: moto.created_at
+        }))
+      }));
 
       setClientesGuardados(registros);
     } catch (error) {
-      console.error('No se pudieron cargar clientes/motos guardados', error);
+      console.error('No se pudieron cargar clientes desde Supabase', error);
     }
   }, []);
+
+  useEffect(() => {
+    void cargarClientes();
+  }, [cargarClientes]);
 
   useEffect(() => {
     try {
